@@ -1,0 +1,34 @@
+# Security Group: sg-bastion
+# Purpose: SSH jump host — single controlled entry point to private instances
+
+# ─────────────────────────────────────────
+# INBOUND RULES
+# ─────────────────────────────────────────
+
+Type        Protocol  Port  Source              Justification
+──────────  ────────  ────  ──────────────────  ────────────────────────────────────────────────────────
+SSH         TCP       22    YOUR_IP_ADDRESS/32  Only your known workstation IP can initiate SSH to the
+                                                bastion. /32 restricts to a single host — no CIDR block
+                                                means no neighbouring IPs share access.
+
+# ─────────────────────────────────────────
+# OUTBOUND RULES
+# ─────────────────────────────────────────
+
+Type        Protocol  Port  Destination         Justification
+──────────  ────────  ────  ──────────────────  ────────────────────────────────────────────────────────
+SSH         TCP       22    sg-web-tier         Allows bastion to jump to web tier instances for
+                                                administrative access. SG reference is used so the rule
+                                                remains valid as web tier instances scale.
+SSH         TCP       22    sg-app-tier         Allows bastion to jump to app tier instances.
+SSH         TCP       22    sg-database-tier    Allows emergency DBA SSH access to database instances
+                                                via the bastion.
+
+# ─────────────────────────────────────────
+# DESIGN NOTES
+# ─────────────────────────────────────────
+# - All outbound rules use Security Group references, not CIDR ranges.
+# - No outbound rule to 0.0.0.0/0 — the bastion is not a general-purpose server
+#   and should never initiate internet connections.
+# - If the bastion is managed via AWS Systems Manager (SSM), port 22 inbound
+#   can be removed entirely, further reducing attack surface.

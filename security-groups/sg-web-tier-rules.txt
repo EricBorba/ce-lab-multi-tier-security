@@ -1,0 +1,37 @@
+# Security Group: sg-web-tier
+# Purpose: Public-facing web servers — terminate HTTP/HTTPS from the internet
+
+# ─────────────────────────────────────────
+# INBOUND RULES
+# ─────────────────────────────────────────
+
+Type        Protocol  Port  Source              Justification
+──────────  ────────  ────  ──────────────────  ────────────────────────────────────────────────────────
+HTTP        TCP       80    0.0.0.0/0           Web servers must be publicly reachable. Traffic should
+                                                be redirected to HTTPS at the application/ALB layer.
+HTTPS       TCP       443   0.0.0.0/0           Primary secure traffic from all internet users.
+SSH         TCP       22    sg-bastion          SSH access is permitted only from the bastion host SG.
+                                                No direct SSH from the internet is allowed.
+
+# ─────────────────────────────────────────
+# OUTBOUND RULES
+# ─────────────────────────────────────────
+
+Type        Protocol  Port  Destination         Justification
+──────────  ────────  ────  ──────────────────  ────────────────────────────────────────────────────────
+Custom TCP  TCP       8080  sg-app-tier         Web servers forward application requests to the app
+                                                tier on port 8080 only. Referencing sg-app-tier ensures
+                                                only legitimate app tier instances are reachable.
+HTTPS       TCP       443   0.0.0.0/0           Allows OS package updates (apt/yum), AWS agent
+                                                communication, and external HTTPS API calls.
+
+# ─────────────────────────────────────────
+# DESIGN NOTES
+# ─────────────────────────────────────────
+# - There is NO outbound rule to sg-database-tier. The web tier cannot reach
+#   the database under any circumstances — requests must go through the app tier.
+# - The outbound 443 to 0.0.0.0/0 rule could be restricted to AWS IP ranges
+#   (for SSM/CloudWatch) plus specific package repository CIDRs in production.
+# - If an Application Load Balancer (ALB) sits in front of these instances,
+#   the inbound 80/443 rules apply to the ALB's security group instead, and
+#   the web EC2 SG would accept traffic only from the ALB SG.

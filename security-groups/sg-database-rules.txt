@@ -1,0 +1,41 @@
+# Security Group: sg-database-tier
+# Purpose: Database servers — most restricted tier, accepts DB connections only from app tier
+
+# ─────────────────────────────────────────
+# INBOUND RULES
+# ─────────────────────────────────────────
+
+Type        Protocol  Port  Source              Justification
+──────────  ────────  ────  ──────────────────  ────────────────────────────────────────────────────────
+MySQL/      TCP       3306  sg-app-tier         Database port is open exclusively to the app tier SG.
+Aurora                                          No other tier, no internet source, can connect to
+                                                the database. This is the most critical rule in the
+                                                entire architecture.
+                                                (Replace with 5432 for PostgreSQL)
+SSH         TCP       22    sg-bastion          Emergency DBA SSH access only through the bastion.
+                                                Consider disabling in production and using RDS
+                                                parameter groups / AWS Systems Manager instead.
+
+# ─────────────────────────────────────────
+# OUTBOUND RULES
+# ─────────────────────────────────────────
+
+Type        Protocol  Port  Destination         Justification
+──────────  ────────  ────  ──────────────────  ────────────────────────────────────────────────────────
+HTTPS       TCP       443   0.0.0.0/0           Minimum required for OS patch updates and AWS agent
+                                                communication. In a hardened environment this should
+                                                be restricted to specific AWS service endpoints.
+
+# ─────────────────────────────────────────
+# DESIGN NOTES
+# ─────────────────────────────────────────
+# - There is NO inbound rule for 0.0.0.0/0 on any port. The database is
+#   completely private.
+# - There is NO inbound rule from sg-web-tier. Even if the web tier is
+#   compromised, it cannot reach the database.
+# - If using Amazon RDS (managed), SSH (port 22) inbound is not applicable
+#   and this rule should be removed entirely.
+# - For RDS, the security group is attached to the DB instance directly and
+#   the same inbound-from-sg-app-tier rule applies.
+# - Consider enabling RDS Enhanced Monitoring and enabling audit logging
+#   at the database engine level as a compensating control.

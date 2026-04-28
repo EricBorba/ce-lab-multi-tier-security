@@ -1,0 +1,36 @@
+# Security Group: sg-app-tier
+# Purpose: Backend application servers — accepts requests only from the web tier
+
+# ─────────────────────────────────────────
+# INBOUND RULES
+# ─────────────────────────────────────────
+
+Type        Protocol  Port  Source              Justification
+──────────  ────────  ────  ──────────────────  ────────────────────────────────────────────────────────
+Custom TCP  TCP       8080  sg-web-tier         Application port is open only to web tier instances.
+                                                No internet source can reach port 8080 directly.
+SSH         TCP       22    sg-bastion          SSH access only via the bastion jump host.
+
+# ─────────────────────────────────────────
+# OUTBOUND RULES
+# ─────────────────────────────────────────
+
+Type        Protocol  Port  Destination         Justification
+──────────  ────────  ────  ──────────────────  ────────────────────────────────────────────────────────
+MySQL/      TCP       3306  sg-database-tier    App tier connects to MySQL database. Use 3306 for MySQL.
+Aurora                                          Change to 5432 for PostgreSQL. Only sg-database-tier
+                                                instances can receive this traffic.
+PostgreSQL  TCP       5432  sg-database-tier    (Alternative) Use if running PostgreSQL instead of MySQL.
+                                                Remove the 3306 rule if only one DB engine is used.
+HTTPS       TCP       443   0.0.0.0/0           Allows OS updates, AWS SSM agent, CloudWatch agent,
+                                                and any external HTTPS API calls the app tier requires.
+
+# ─────────────────────────────────────────
+# DESIGN NOTES
+# ─────────────────────────────────────────
+# - The app tier has NO inbound rule from 0.0.0.0/0 on any port.
+#   It is completely hidden from the public internet.
+# - Only one of the DB port rules (3306 or 5432) should be active depending
+#   on the database engine deployed.
+# - The app tier CANNOT reach the web tier (no such outbound rule), preventing
+#   response-smuggling or lateral movement back through the stack.
