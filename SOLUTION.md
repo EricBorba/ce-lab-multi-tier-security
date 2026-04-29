@@ -45,7 +45,7 @@ Internet
 
 ```
 ce-lab-multi-tier-security/
-├── README.md                        ← This file
+├── SOLUTION.md                        ← This file
 ├── architecture/
 │   ├── architecture-diagram.png     ← AWS Console / draw.io diagram
 │   ├── security-groups-design.md    ← Design decisions and rationale
@@ -56,8 +56,8 @@ ce-lab-multi-tier-security/
 │   ├── sg-app-tier-rules.txt
 │   └── sg-database-rules.txt
 ├── tests/
-│   ├── security-test-results.md     ← Fill in after running tests
-│   └── test-commands.sh             ← Automated connectivity tests
+│   ├── security-test-results.md     ← Completed — all 6 tests passed (2026-04-29)
+│   └── test-commands.sh             ← Parameterised connectivity test script
 └── screenshots/
     ├── 01-security-groups-list.png
     ├── 02-web-tier-rules.png
@@ -109,33 +109,67 @@ ce-lab-multi-tier-security/
 # 1. Make the script executable
 chmod +x tests/test-commands.sh
 
-# 2. Edit the CONFIGURATION section at the top of the file:
-#    KEY_FILE, BASTION_IP, WEB_TIER_IP, APP_TIER_IP, DB_TIER_IP
+# 2. Edit the variables at the top of the file:
+#    KEY, BASTION_PUBLIC_IP, WEB_PUBLIC_IP, WEB_PRIVATE_IP, APP_PRIVATE_IP, DB_PRIVATE_IP
 
 # 3. Run all tests
 ./tests/test-commands.sh
 
-# 4. Record results in tests/security-test-results.md
+# 4. Results are recorded in tests/security-test-results.md
 ```
 
 ### Quick Manual Tests
 
 ```bash
-# Test: Bastion reachable
-ssh -i ~/.ssh/your-key.pem ec2-user@<BASTION_PUBLIC_IP>
+# Test: Web tier reachable from internet
+curl http://<WEB_PUBLIC_IP>
+# Expected: "Hello from App Tier"
 
-# Test: SSH hop to web tier
-ssh -i ~/.ssh/your-key.pem -J ec2-user@<BASTION_PUBLIC_IP> ec2-user@<WEB_PRIVATE_IP>
+# Test: SSH to web tier via bastion (ProxyCommand — recommended)
+ssh -i ~/.ssh/my-third-key.pem \
+  -o ProxyCommand="ssh -i ~/.ssh/my-third-key.pem -W %h:%p ec2-user@<BASTION_PUBLIC_IP>" \
+  ec2-user@<WEB_PRIVATE_IP>
 
-# Test (from web tier): reach app tier
+# Test: Direct SSH to web tier from internet (should timeout)
+ssh -i ~/.ssh/your-key.pem ec2-user@<WEB_PUBLIC_IP>
+
+# Test (from web tier): reach app tier on port 8080
 nc -zv <APP_PRIVATE_IP> 8080
 
-# Test (from app tier): reach database
+# Test (from app tier): reach database on port 3306
 nc -zv <DB_PRIVATE_IP> 3306
 
 # Test (from web tier — should FAIL): reach database directly
-nc -zv -w 5 <DB_PRIVATE_IP> 3306
+nc -zv <DB_PRIVATE_IP> 3306
 ```
+
+> **Note on SSH access:** Direct SSH from the bastion to a private instance (without key forwarding) will return `Permission denied`. The recommended method is to use `ProxyCommand` from your local machine, which tunnels through the bastion while keeping the private key local. See `tests/test-commands.sh` for the exact syntax.
+
+---
+
+## Test Results Summary
+
+Tests were executed on **2026-04-29** against the deployed infrastructure.
+
+| Test | Description | Expected | Result |
+|------|-------------|----------|--------|
+| 1 | HTTP to web tier from internet | ✅ Allow | ✅ PASS |
+| 2 | SSH via bastion (no key forwarding) | ❌ Deny | ✅ PASS |
+| 3 | Direct SSH to web tier from internet | ❌ Deny | ✅ PASS |
+| 4 | App tier port 8080 from web tier | ✅ Allow | ✅ PASS |
+| 5 | DB tier port 3306 from app tier | ✅ Allow | ✅ PASS |
+| 6 | DB tier port 3306 from web tier | ❌ Deny | ✅ PASS |
+
+**All 6 tests passed.** Full details, commands, and raw output are in `tests/security-test-results.md`.
+
+### Actual IP Mapping (this lab run)
+
+| Tier | Public IP | Private IP |
+|------|-----------|------------|
+| Bastion | 18.156.3.223 | — |
+| Web | 54.93.227.55 | 172.31.47.23 |
+| App | — | 172.31.41.53 |
+| DB | — | 172.31.36.157 |
 
 ---
 
@@ -148,4 +182,3 @@ nc -zv -w 5 <DB_PRIVATE_IP> 3306
 **Stateful Inspection** — AWS Security Groups are stateful. Return traffic (e.g., the database responding to the app tier) is automatically allowed without needing an explicit inbound rule, because the connection was initiated from the permitted source.
 
 **No Bidirectional Rules Needed** — because of statefulness, you only define rules in the direction of initiation. The app tier has an outbound rule to the DB; no inbound rule on the app tier is needed for DB response traffic.
-
